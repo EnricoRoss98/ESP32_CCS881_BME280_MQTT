@@ -1,6 +1,11 @@
 reboot_email = True  # if you want to send an email before the ESP reboot
 use_MQTT = True
 
+sda_pin = 8
+scl_pin = 10
+
+lightsleep_length = 115  # in seconds
+
 reduce_WiFi_power = True    # if LOLIN C3 Mini is used
 
 encrypt_data = True  # if set True you have to decrypt the data with the same key after the reception

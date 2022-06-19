@@ -141,7 +141,7 @@ mqtt_port = config.mqtt_port
 client_id = ubinascii.hexlify(machine.unique_id())
 topic_pub = config.topic_pub
 
-i2c = SoftI2C(scl=Pin(10), sda=Pin(8), freq=5000)
+i2c = SoftI2C(scl=Pin(config.scl_pin), sda=Pin(config.sda_pin), freq=5000)
 
 password = config.aes_key
 
@@ -294,7 +294,7 @@ try:
                 set_baseline()
                 
         time.sleep(0.1)
-        lightsleep(115*1000)
+        lightsleep(config.lightsleep_length*1000)
         
 except:     # Per qualsiasi altro problema
     print("GENERIC ERROR... The ESP try to restart now...")
