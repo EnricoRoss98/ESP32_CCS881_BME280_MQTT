@@ -4,7 +4,7 @@ Micropython files to retrieve data from CCS881 and BME280 using ESP32 and send i
 
 ### FEATURES:
 - This code is optimized ESP side to consume less power thanks to lightsleep
-- All possible exceptions are managed differently and before reboot it can send an email with the reason for reboot
+- All possible exceptions are managed differently and before reboot, it can send an email with the reason for reboot
 - More than one WiFi network can be configured
 - CCS881 baseline saved in internal memory and restored after reboot
 - Message can be enctypted with AES before send
