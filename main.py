@@ -42,7 +42,7 @@ def connect_and_subscribe():
     print('Connected to the MQTT broker')
     return client
 
-def restart_and_reconnect(param):
+def restart_and_reconnect(param, param2=0):
     # a seconda del parametro sono in grado di identificare il codice di errore:
     # 5 corti: errore generico e non gestito, ricade nell'except generale
     # - 1 lungo e 4 corti: non riuscito a connettersi al wifi dopo il risvelgio
@@ -88,7 +88,15 @@ def restart_and_reconnect(param):
                 smtp.write("Per troppe iterazioni non ho ")
                 smtp.write("ottenuto valori dal sensore.\r\n\r\n")
             elif param == 4:
-                smtp.write("Sensore/i non trovato/i.\r\n\r\n")
+                if param2 == 0:
+                    smtp.write("Sensore/i non trovato/i.\r\n\r\n")
+                elif param2 == 1:
+                    smtp.write("Errore lettura da sensore BME280.\r\n\r\n")
+                elif param2 == 2:
+                    smtp.write("Errore lettura da sensore CCS811.\r\n\r\n")
+                elif param2 == 3:
+                    smtp.write("Put Env Data Error!\r\n\r\n")
+                    
             elif param == 5:
                 smtp.write("Falliti 3 tentativi di connessione al broker MQTT.\n")
                 smtp.write("Attendo 5 minuti prima di riavviarlo sperando che ")
@@ -141,7 +149,7 @@ mqtt_port = config.mqtt_port
 client_id = ubinascii.hexlify(machine.unique_id())
 topic_pub = config.topic_pub
 
-i2c = SoftI2C(scl=Pin(config.scl_pin), sda=Pin(config.sda_pin), freq=5000)
+i2c = SoftI2C(scl=Pin(10), sda=Pin(8), freq=5000)
 
 password = config.aes_key
 
@@ -178,7 +186,7 @@ try:
             print(temperature, humidity)
         except:
             print('Exception while reading from BME280...\n')
-            restart_and_reconnect(4)
+            restart_and_reconnect(4, 1)
         
         # faccio la media tra 5 valori
         count = 0
@@ -186,44 +194,62 @@ try:
         co2_list = 0
         voc_list = 0
         try:
-            s_ccs811.put_envdata(humidity=humidity,temp=temperature)
+            try:
+                s_ccs811.put_envdata(humidity=humidity,temp=temperature)
+            except:
+                restart_and_reconnect(4, 3)
+            
             count_not_ready = 0  # conto per quante volte il sensore non era pronto, al massimo riavvio
             while True:
-                if s_ccs811.data_ready():
-                    co2_temp = s_ccs811.eCO2
-                    voc_temp = s_ccs811.tVOC
-                    print(co2_temp, voc_temp)
-                    if co2_temp > 400:
-                        co2_list = co2_list + co2_temp
-                        voc_list = voc_list + voc_temp
-                        count = count + 1
-                        count_2 = 0
-                    else:
-                        count2 = count2 + 1
+                try:
+                    if s_ccs811.data_ready():
                         
-                        # se il valore 400 di CO2 si ripete per più di 10 volte allora li accetto come veritieri
-                        if count2 >= 10 and co2_temp == 400:
+                        try:
+                            co2_temp = s_ccs811.eCO2
+                            voc_temp = s_ccs811.tVOC
+                        except:
+                            time.sleep(0.5)
+                            continue
+                            
+                        print(co2_temp, voc_temp)
+                        if co2_temp > 400:
                             co2_list = co2_list + co2_temp
                             voc_list = voc_list + voc_temp
                             count = count + 1
-                    
-                    if count == 5:
-                        break
-                    if count2 == 20: # troppe volte non ha preso valori utili
-                        print('Too many invalid values from the CCS811')
-                        restart_and_reconnect(2)
+                            count_2 = 0
+                        else:
+                            count2 = count2 + 1
+                            
+                            # se il valore 400 di CO2 si ripete per più di 10 volte allora li accetto come veritieri
+                            if count2 >= 10 and co2_temp == 400:
+                                co2_list = co2_list + co2_temp
+                                voc_list = voc_list + voc_temp
+                                count = count + 1
                         
-                    time.sleep(1)
-                else:
-                    count_not_ready = count_not_ready + 1
-                
-                if count_not_ready == 30000: # per troppe iterazioni non ho ottenuto valori dal sensore, riavvio
-                    print('Too many iterations with invalid values from the sensor')
-                    restart_and_reconnect(3)
+                        if count == 5:
+                            break
+                        if count2 == 20: # troppe volte non ha preso valori utili
+                            if co2_0_is_error:
+                                print('Too many invalid values from the CCS811')
+                                restart_and_reconnect(2)
+                            else:
+                                co2_list = co2_list + 400
+                                voc_list = voc_list + 0
+                                count = count + 1
+                            
+                        time.sleep(1)
+                    else:
+                        count_not_ready = count_not_ready + 1
                     
+                    if count_not_ready == 30000: # per troppe iterazioni non ho ottenuto valori dal sensore, riavvio
+                        print('Too many iterations with invalid values from the sensor')
+                        restart_and_reconnect(3)
+                except:
+                    time.sleep(0.5)
+                    continue
         except:
             print('Exception while reading from CCS811...\n')
-            restart_and_reconnect(4)
+            restart_and_reconnect(4, 2)
         
         co2 = round(co2_list/5, 2)
         voc = round(voc_list/5, 2)
@@ -237,11 +263,9 @@ try:
             payload = payload + '['+str(temperature)+';'+str(humidity)+';'+str(co2)+';'+str(voc)+']'
             
             # encrypt
-            if config.encrypt_data:
-                data_bytes = payload.encode()
-                enc = aes(password, 1)
-                encrypted = enc.encrypt(data_bytes + b'\x00' * ((16 - (len(data_bytes) % 16)) % 16))
-                payload = encrypted
+            data_bytes = payload.encode()
+            enc = aes(password, 1)
+            encrypted = enc.encrypt(data_bytes + b'\x00' * ((16 - (len(data_bytes) % 16)) % 16))
             
             reconnect_to_wifi()
 
@@ -294,7 +318,7 @@ try:
                 set_baseline()
                 
         time.sleep(0.1)
-        lightsleep(config.lightsleep_length*1000)
+        lightsleep(115*1000)
         
 except:     # Per qualsiasi altro problema
     print("GENERIC ERROR... The ESP try to restart now...")
