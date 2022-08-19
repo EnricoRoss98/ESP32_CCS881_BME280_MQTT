@@ -23,3 +23,5 @@ email_pw = "EMAIL_FROM_PASSWORD"
 email_smtp_server = "SMTP_SERVER"
 email_smtp_port = 465
 email_addr_to = "EMAIL_ADDRESS_TO"
+
+co2_0_is_error = False  # if False if CCS811 responds with lots of 0 pick 400ppm, if set to True goes into error
